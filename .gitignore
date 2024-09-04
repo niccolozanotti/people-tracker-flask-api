@@ -1,6 +1,8 @@
 # macOS config files
 .DS_Store
 
+# local tests
+test_lambda_flask.py
 # ----
 # Pre-made Python .gitignore https://github.com/github/gitignore/blob/main/Python.gitignore
 
