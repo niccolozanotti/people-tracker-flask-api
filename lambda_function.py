@@ -3,7 +3,7 @@ from flask_cors import CORS
 from datetime import datetime, timezone
 import csv
 import boto3
-import os
+
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -26,16 +26,16 @@ def register():
     name = data['name']
     occupants.add(name)
     log_action(name, 'register')
-    return jsonify({"status": "registered", "occupants": len(occupants)})
+    return jsonify({"status": "registered", "occupants": list(occupants)})
 
 
 @app.route('/unregister', methods=['POST'])
 def unregister():
     data = request.json
     name = data['name']
-    occupants.remove(name)
+    occupants.discard(name)   # set.discard() avoids KeyError if name not in set
     log_action(name, 'unregister')
-    return jsonify({"status": "unregistered", "occupants": len(occupants)})
+    return jsonify({"status": "unregistered", "occupants": list(occupants)})
 
 
 @app.route('/status', methods=['GET'])
