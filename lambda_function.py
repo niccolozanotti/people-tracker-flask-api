@@ -1,11 +1,13 @@
 import json
+
+import botocore
 from flask import Flask, request
 from flask_cors import CORS
 import boto3
 import csv
 from datetime import datetime, timezone
 from awsgi import response
-
+import botocore.exceptions
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
@@ -63,12 +65,20 @@ def append_log_to_s3(log_entry):
     LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'
     log_file = f'/tmp/{LOG_FILE_KEY}'  # Temporary file path
 
-    # Download the existing log file from S3 if it exists
+    # Attempt to download the existing log file from S3 if it exists
     try:
         s3.download_file(BUCKET_NAME, LOG_FILE_KEY, log_file)
         file_exists = True
     except s3.exceptions.NoSuchKey:
+        # The file doesn't exist in S3; create a new one
         file_exists = False
+    except botocore.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == '404':
+            # The file doesn't exist in S3; create a new one
+            file_exists = False
+        else:
+            # If it's a different error, re-raise it
+            raise
 
     # Append the log entry to the file
     with open(log_file, 'a', newline='') as file:
