@@ -20,7 +20,7 @@ LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'  # One log file for each
 occupants = set()
 
 
-@app.route('/register', methods=['POST'])
+@app.route('/people/register', methods=['POST'])
 def register():
     data = request.json
     name = data['name']
@@ -29,7 +29,7 @@ def register():
     return jsonify({"status": "registered", "occupants": list(occupants)})
 
 
-@app.route('/unregister', methods=['POST'])
+@app.route('/people/unregister', methods=['POST'])
 def unregister():
     data = request.json
     name = data['name']
@@ -38,7 +38,7 @@ def unregister():
     return jsonify({"status": "unregistered", "occupants": list(occupants)})
 
 
-@app.route('/status', methods=['GET'])
+@app.route('/people/status', methods=['GET'])
 def status():
     return jsonify({
         "status": "open" if occupants else "closed",
