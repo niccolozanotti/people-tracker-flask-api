@@ -1,3 +1,4 @@
-Flask
+flask
 boto3
 flask_cors
+werkzeug
