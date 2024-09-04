@@ -1,12 +1,10 @@
 import json
 from flask import Flask, request
 from flask_cors import CORS
-from flask.ctx import AppContext
-from werkzeug.test import EnvironBuilder
-from werkzeug.wrappers import Request
-from datetime import datetime, timezone
-import csv
 import boto3
+import csv
+from datetime import datetime, timezone
+from awsgi import response
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -83,57 +81,9 @@ def append_log_to_s3(log_entry):
     s3.upload_file(log_file, BUCKET_NAME, LOG_FILE_KEY)
 
 
+# AWS Lambda handler
 def lambda_handler(event, context):
-    # Print the event for debugging
-    print(f"Received event: {json.dumps(event)}")
-
-    # Extract relevant information from the event
-    http_method = event['httpMethod']
-    path = event['path']
-    headers = event.get('headers', {})
-
-    # Process the body
-    body = event.get('body', '{}')
-    if isinstance(body, str):
-        try:
-            body = json.loads(body)
-        except json.JSONDecodeError:
-            pass  # Keep body as string if it's not JSON
-
-    # Ensure Content-Type is set
-    headers['Content-Type'] = 'application/json'
-
-    # Create a WSGI environment
-    environ = EnvironBuilder(
-        path=path,
-        method=http_method,
-        headers=headers,
-        data=json.dumps(body) if isinstance(body, dict) else body,
-    ).get_environ()
-
-    # Create a request object
-    req = Request(environ)
-
-    # Push an application context
-    with AppContext(app):
-        # Handle the request
-        with app.request_context(environ):
-            try:
-                # Dispatch the request to Flask
-                response = app.full_dispatch_request()
-
-                return {
-                    'statusCode': response.status_code,
-                    'body': response.get_data(as_text=True),
-                    'headers': dict(response.headers)
-                }
-            except Exception as e:
-                print(f"Error: {str(e)}")
-                return {
-                    'statusCode': 500,
-                    'body': json.dumps({"error": "Internal server error"}),
-                    'headers': {'Content-Type': 'application/json'}
-                }
+    return response(app, event, context)
 
 
 # For local testing

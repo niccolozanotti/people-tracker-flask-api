@@ -1,4 +1,4 @@
 flask
+flask-cors
 boto3
-flask_cors
-werkzeug
+aws-wsgi
