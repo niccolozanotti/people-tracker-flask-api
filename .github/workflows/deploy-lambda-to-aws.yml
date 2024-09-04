@@ -28,7 +28,7 @@ jobs:
         cd package
         zip -r9 ../lambda_function.zip .
         cd ..
-        zip -g lambda_function.zip lambda-function.py
+        zip -g lambda_function.zip lambda_function.py
 
     - name: Deploy to AWS Lambda
       env:
