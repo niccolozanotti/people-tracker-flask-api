@@ -26,9 +26,9 @@ jobs:
     - name: Zip package
       run: |
         cd package
-        zip -r9 ../lambda_function.zip .
+        zip -r9 ../app.zip .
         cd ..
-        zip -g lambda_function.zip lambda_function.py
+        zip -g app.zip app.py
 
     - name: Deploy to AWS Lambda
       env:
@@ -36,4 +36,4 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         AWS_REGION: eu-north-1
       run: |
-        aws lambda update-function-code --function-name registration-real-time --zip-file fileb://lambda_function.zip
+        aws lambda update-function-code --function-name registration-real-time --zip-file fileb://app.zip
