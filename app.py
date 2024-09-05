@@ -5,17 +5,15 @@ from flask_cors import CORS
 import boto3
 import csv
 from datetime import datetime, timezone
+from io import StringIO
 from awsgi import response
-import botocore.exceptions
+
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # Initialize the S3 client
 s3 = boto3.client('s3')
-BUCKET_NAME = 'ugo-people-tracker'  # S3 bucket name
-
-# In-memory storage for current occupants
-occupants = set()
+BUCKET_NAME = 'ugo-people-tracker'
 
 
 @app.route('/people/register', methods=['POST'])
@@ -23,10 +21,8 @@ def register():
     data = request.json
     name = data.get('name')
     if name:
-        occupants.add(name)
         log_action(name, 'register')
-        return json.dumps({"status": "registered", "occupants": list(occupants)}), 200, {
-            'Content-Type': 'application/json'}
+        return json.dumps({"status": "registered"}), 200, {'Content-Type': 'application/json'}
     else:
         return json.dumps({"error": "Name is required"}), 400, {'Content-Type': 'application/json'}
 
@@ -36,16 +32,15 @@ def unregister():
     data = request.json
     name = data.get('name')
     if name:
-        occupants.discard(name)
         log_action(name, 'unregister')
-        return json.dumps({"status": "unregistered", "occupants": list(occupants)}), 200, {
-            'Content-Type': 'application/json'}
+        return json.dumps({"status": "unregistered"}), 200, {'Content-Type': 'application/json'}
     else:
         return json.dumps({"error": "Name is required"}), 400, {'Content-Type': 'application/json'}
 
 
 @app.route('/people/status', methods=['GET'])
 def status():
+    occupants = get_current_occupants()
     return json.dumps({
         "status": "open" if occupants else "closed",
         "occupants": list(occupants),
@@ -55,53 +50,64 @@ def status():
 
 def log_action(name, action):
     now = datetime.now(timezone.utc)
-    log_entry = [now.date(), now.time(), name, action]
+    log_entry = [now.date().isoformat(), now.time().isoformat(), name, action]
     append_log_to_s3(log_entry)
 
 
 def append_log_to_s3(log_entry):
     today = datetime.today()
-    LOG_FILE_KEY = f'/tmp/{today.strftime("%Y-%m-%d")}-logs.csv'
-    log_file = f'{LOG_FILE_KEY}'  # Temporary file path
+    LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'
 
-    # Attempt to download the existing log file from S3 if it exists
     try:
-        s3.download_file(BUCKET_NAME, LOG_FILE_KEY, log_file)
-        file_exists = True
+        response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
+        existing_content = response['Body'].read().decode('utf-8')
     except s3.exceptions.NoSuchKey:
-        # The file doesn't exist in S3; create a new one
-        file_exists = False
-    except botocore.exceptions.ClientError as e:
-        if e.response['Error']['Code'] == '404':
-            # The file doesn't exist in S3; create a new one
-            file_exists = False
-        else:
-            # If it's a different error, re-raise it
-            raise
+        existing_content = 'Date,Time,Name,Action\n'
 
-    # Append the log entry to the file
-    with open(log_file, 'a', newline='') as file:
-        writer = csv.writer(file)
-        if not file_exists:
-            writer.writerow(['Date', 'Time', 'Name', 'Action'])  # Write header if file doesn't exist
-        writer.writerow(log_entry)
+    csv_buffer = StringIO()
+    csv_buffer.write(existing_content)
+    csv_writer = csv.writer(csv_buffer)
+    csv_writer.writerow(log_entry)
 
-    # Upload the updated log file back to S3
-    s3.upload_file(log_file, BUCKET_NAME, LOG_FILE_KEY)
+    s3.put_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY, Body=csv_buffer.getvalue())
+
+
+def get_current_occupants():
+    today = datetime.today()
+    LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'
+
+    try:
+        response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
+        csv_content = response['Body'].read().decode('utf-8')
+        csv_reader = csv.reader(StringIO(csv_content))
+        next(csv_reader)  # Skip header
+
+        occupants = set()
+        for row in csv_reader:
+            if row[3] == 'register':
+                occupants.add(row[2])
+            elif row[3] == 'unregister':
+                occupants.discard(row[2])
+
+        return occupants
+    except s3.exceptions.NoSuchKey:
+        return set()
+
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+
 # AWS Lambda handler
 def lambda_handler(event, context):
     # Log the full event (this includes the request body and other information)
     logger.info(f"Received event: {json.dumps(event)}")
-    
+
     # Log only the request body (if present)
     if 'body' in event:
         logger.info(f"Request body: {event['body']}")
-    
+
     # Call the response function (assuming it's part of your application logic)
     return response(app, event, context)
 
