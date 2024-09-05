@@ -1,6 +1,4 @@
 import json
-
-import botocore
 from flask import Flask, request
 from flask_cors import CORS
 import boto3
@@ -63,7 +61,7 @@ def log_action(name, action):
 def append_log_to_s3(log_entry):
     today = datetime.today()
     LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'
-    log_file = f'/tmp/{LOG_FILE_KEY}'  # Temporary file path
+    log_file = f'{LOG_FILE_KEY}'  # Temporary file path
 
     # Attempt to download the existing log file from S3 if it exists
     try:
