@@ -1,4 +1,5 @@
 import json
+import logging
 from flask import Flask, request
 from flask_cors import CORS
 import boto3
@@ -88,9 +89,20 @@ def append_log_to_s3(log_entry):
     # Upload the updated log file back to S3
     s3.upload_file(log_file, BUCKET_NAME, LOG_FILE_KEY)
 
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 # AWS Lambda handler
 def lambda_handler(event, context):
+    # Log the full event (this includes the request body and other information)
+    logger.info(f"Received event: {json.dumps(event)}")
+    
+    # Log only the request body (if present)
+    if 'body' in event:
+        logger.info(f"Request body: {event['body']}")
+    
+    # Call the response function (assuming it's part of your application logic)
     return response(app, event, context)
 
 
