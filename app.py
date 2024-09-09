@@ -42,17 +42,23 @@ def unregister():
 def status():
     occupants = get_current_occupants()
     last_update = get_last_update_time()
+
+    if occupants:
+        status_message = "open"
+    else:
+        status_message = "closed"
+
     return json.dumps({
-        "status": "open" if occupants else "closed",
+        "status": status_message,
         "occupants": list(occupants),
         "count": len(occupants),
-        "last_update": last_update
+        "last_update": last_update  # Only time will be included
     }), 200, {'Content-Type': 'application/json'}
 
 
 def log_action(name, action):
     now = datetime.now(timezone.utc)
-    log_entry = [now.strftime('%H:%M'), name, action]
+    log_entry = [now.date().isoformat(), now.strftime('%H:%M'), name, action]
     append_log_to_s3(log_entry)
 
 
@@ -64,7 +70,14 @@ def append_log_to_s3(log_entry):
         s3response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
         existing_content = s3response['Body'].read().decode('utf-8')
     except s3.exceptions.NoSuchKey:
-        existing_content = 'Date,Time,Name,Action\n'
+        existing_content = 'Date,Time,Name,Action\n'  # Log now has separate Date and Time columns
+
+    csv_buffer = StringIO()
+    csv_buffer.write(existing_content)
+    csv_writer = csv.writer(csv_buffer)
+    csv_writer.writerow(log_entry)
+
+    s3.put_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY, Body=csv_buffer.getvalue())
 
     csv_buffer = StringIO()
     csv_buffer.write(existing_content)
@@ -89,8 +102,8 @@ def get_last_update_time():
             last_row = row  # Keep track of the last row
 
         if last_row:
-            date_str, time_str = last_row[0], last_row[1]
-            return f"{date_str} {time_str}"
+            time_str = last_row[1]  # Now we only store the time in the second column
+            return time_str
 
     except s3.exceptions.NoSuchKey:
         return None
