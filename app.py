@@ -58,7 +58,7 @@ def status():
 
 def log_action(name, action):
     now = datetime.now(timezone.utc)
-    log_entry = [now.date().isoformat(), now.strftime('%H:%M'), name, action]
+    log_entry = [now.date().isoformat(), now.strftime('%H:%M:%S'), name, action]  # Format time to HH:MM:SS
     append_log_to_s3(log_entry)
 
 
@@ -102,7 +102,7 @@ def get_last_update_time():
             last_row = row  # Keep track of the last row
 
         if last_row:
-            time_str = last_row[1]  # Now we only store the time in the second column
+            time_str = last_row[1]  # Retrieve the formatted time
             return time_str
 
     except s3.exceptions.NoSuchKey:
