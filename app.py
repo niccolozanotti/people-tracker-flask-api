@@ -52,7 +52,7 @@ def status():
 
 def log_action(name, action):
     now = datetime.now(timezone.utc)
-    log_entry = [now.date().isoformat(), now.strftime('%H:%M'), name, action]
+    log_entry = [now.strftime('%H:%M'), name, action]
     append_log_to_s3(log_entry)
 
 
