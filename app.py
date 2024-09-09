@@ -41,10 +41,12 @@ def unregister():
 @app.route('/people/status', methods=['GET'])
 def status():
     occupants = get_current_occupants()
+    last_update = get_last_update_time()
     return json.dumps({
         "status": "open" if occupants else "closed",
         "occupants": list(occupants),
-        "count": len(occupants)
+        "count": len(occupants),
+        "last_update": last_update
     }), 200, {'Content-Type': 'application/json'}
 
 
@@ -59,8 +61,8 @@ def append_log_to_s3(log_entry):
     LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'
 
     try:
-        response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
-        existing_content = response['Body'].read().decode('utf-8')
+        s3response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
+        existing_content = s3response['Body'].read().decode('utf-8')
     except s3.exceptions.NoSuchKey:
         existing_content = 'Date,Time,Name,Action\n'
 
@@ -72,13 +74,35 @@ def append_log_to_s3(log_entry):
     s3.put_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY, Body=csv_buffer.getvalue())
 
 
+def get_last_update_time():
+    today = datetime.today()
+    LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'
+
+    try:
+        s3response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
+        csv_content = s3response['Body'].read().decode('utf-8')
+        csv_reader = csv.reader(StringIO(csv_content))
+        next(csv_reader)  # Skip header
+
+        last_row = None
+        for row in csv_reader:
+            last_row = row  # Keep track of the last row
+
+        if last_row:
+            date_str, time_str = last_row[0], last_row[1]
+            return f"{date_str} {time_str}"
+
+    except s3.exceptions.NoSuchKey:
+        return None
+
+
 def get_current_occupants():
     today = datetime.today()
     LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'
 
     try:
-        response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
-        csv_content = response['Body'].read().decode('utf-8')
+        s3response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
+        csv_content = s3response['Body'].read().decode('utf-8')
         csv_reader = csv.reader(StringIO(csv_content))
         next(csv_reader)  # Skip header
 
@@ -108,7 +132,7 @@ def lambda_handler(event, context):
     if 'body' in event:
         logger.info(f"Request body: {event['body']}")
 
-    # Call the response function (assuming it's part of your application logic)
+    # Return awsgi response
     return response(app, event, context)
 
 
