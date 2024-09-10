@@ -4,9 +4,10 @@ from flask import Flask, request
 from flask_cors import CORS
 import boto3
 import csv
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from awsgi import response
+
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -57,8 +58,12 @@ def status():
 
 
 def log_action(name, action):
-    now = datetime.now(timezone.utc)
-    log_entry = [now.date().isoformat(), now.strftime('%H:%M:%S'), name, action]  # Format time to HH:MM:SS
+    # Get current time in UTC
+    now_utc = datetime.now(timezone.utc)
+    # Convert to UTC+2 by adding 2 hours
+    now_utc_plus_2 = now_utc + timedelta(hours=2)
+    # Format time to HH:MM:SS
+    log_entry = [now_utc_plus_2.date().isoformat(), now_utc_plus_2.strftime('%H:%M:%S'), name, action]
     append_log_to_s3(log_entry)
 
 
