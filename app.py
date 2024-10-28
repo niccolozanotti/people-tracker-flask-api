@@ -60,10 +60,10 @@ def status():
 def log_action(name, action):
     # Get current time in UTC
     now_utc = datetime.now(timezone.utc)
-    # Convert to UTC+2 by adding 2 hours
-    now_utc_plus_2 = now_utc + timedelta(hours=2)
+    # Convert to UTC+1 by adding 1 hours
+    now_utc_plus_1 = now_utc + timedelta(hours=1)
     # Format time to HH:MM:SS
-    log_entry = [now_utc_plus_2.date().isoformat(), now_utc_plus_2.strftime('%H:%M:%S'), name, action]
+    log_entry = [now_utc_plus_1.date().isoformat(), now_utc_plus_1.strftime('%H:%M:%S'), name, action]
     append_log_to_s3(log_entry)
 
 
