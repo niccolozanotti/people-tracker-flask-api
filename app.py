@@ -4,7 +4,8 @@ from flask import Flask, request
 from flask_cors import CORS
 import boto3
 import csv
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from io import StringIO
 from awsgi import response
 
@@ -58,14 +59,11 @@ def status():
 
 
 def log_action(name, action):
-    # Get current time in UTC
-    now_utc = datetime.now(timezone.utc)
-    # Convert to UTC+1 by adding 1 hours
-    now_utc_plus_1 = now_utc + timedelta(hours=1)
-    # Format time to HH:MM:SS
-    log_entry = [now_utc_plus_1.date().isoformat(), now_utc_plus_1.strftime('%H:%M:%S'), name, action]
+    "Record performed action using Italian time zone format."
+    now_local = datetime.now(ZoneInfo("Europe/Rome"))
+    
+    log_entry = [now_local.date().isoformat(), now_local.strftime('%H:%M:%S'), name, action]
     append_log_to_s3(log_entry)
-
 
 def append_log_to_s3(log_entry):
     today = datetime.today()
