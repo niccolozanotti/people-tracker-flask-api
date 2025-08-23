@@ -1,147 +1,145 @@
+import os
 import json
 import logging
-from flask import Flask, request
-from flask_cors import CORS
-import boto3
-import csv
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from io import StringIO
-from awsgi import response
 
+from awsgi import response
+from flask import Flask, request
+from flask_cors import CORS
+from supabase import create_client, Client
+from supabase.client import ClientOptions
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-# Initialize the S3 client
-s3 = boto3.client('s3')
-BUCKET_NAME = 'ugo-people-tracker'
-
+# Initialize supabase client
+url: str = os.environ.get("SUPABASE_URL")
+key: str = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(
+    url,
+    key,
+    options=ClientOptions(
+        postgrest_client_timeout=10,
+        storage_client_timeout=10,
+        schema="public",
+    )
+)
 
 @app.route('/people/register', methods=['POST'])
 def register():
     data = request.json
     name = data.get('name')
     if name:
-        log_action(name, 'register')
-        return json.dumps({"status": "registered"}), 200, {'Content-Type': 'application/json'}
+        try:
+            log_action(name, 'register')
+            return json.dumps({"status": "registered"}), 200, {'Content-Type': 'application/json'}
+        except Exception as e:
+            logger.error(f"Error registering {name}: {str(e)}")
+            return json.dumps({"error": "Registration failed"}), 500, {'Content-Type': 'application/json'}
     else:
         return json.dumps({"error": "Name is required"}), 400, {'Content-Type': 'application/json'}
-
 
 @app.route('/people/unregister', methods=['POST'])
 def unregister():
     data = request.json
     name = data.get('name')
     if name:
-        log_action(name, 'unregister')
-        return json.dumps({"status": "unregistered"}), 200, {'Content-Type': 'application/json'}
+        try:
+            log_action(name, 'unregister')
+            return json.dumps({"status": "unregistered"}), 200, {'Content-Type': 'application/json'}
+        except Exception as e:
+            logger.error(f"Error unregistering {name}: {str(e)}")
+            return json.dumps({"error": "Unregistration failed"}), 500, {'Content-Type': 'application/json'}
     else:
         return json.dumps({"error": "Name is required"}), 400, {'Content-Type': 'application/json'}
 
-
 @app.route('/people/status', methods=['GET'])
 def status():
-    occupants = get_current_occupants()
-    last_update = get_last_update_time()
+    try:
+        occupants = get_current_occupants()
+        last_update = get_last_update_time()
 
-    if occupants:
-        status_message = "open"
-    else:
-        status_message = "closed"
+        if occupants:
+            status_message = "open"
+        else:
+            status_message = "closed"
 
-    return json.dumps({
-        "status": status_message,
-        "occupants": list(occupants),
-        "count": len(occupants),
-        "last_update": last_update  # Only time will be included
-    }), 200, {'Content-Type': 'application/json'}
-
+        return json.dumps({
+            "status": status_message,
+            "occupants": list(occupants),
+            "count": len(occupants),
+            "last_update": last_update
+        }), 200, {'Content-Type': 'application/json'}
+    except Exception as e:
+        logger.error(f"Error getting status: {str(e)}")
+        return json.dumps({"error": "Failed to get status"}), 500, {'Content-Type': 'application/json'}
 
 def log_action(name, action):
-    "Record performed action using Italian time zone format."
+    """Record performed action using Italian time zone format."""
     now_local = datetime.now(ZoneInfo("Europe/Rome"))
     
-    log_entry = [now_local.date().isoformat(), now_local.strftime('%H:%M:%S'), name, action]
-    append_log_to_s3(log_entry)
-
-def append_log_to_s3(log_entry):
-    today = datetime.today()
-    LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'
-
-    try:
-        s3response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
-        existing_content = s3response['Body'].read().decode('utf-8')
-    except s3.exceptions.NoSuchKey:
-        existing_content = 'Date,Time,Name,Action\n'  # Log now has separate Date and Time columns
-
-    csv_buffer = StringIO()
-    csv_buffer.write(existing_content)
-    csv_writer = csv.writer(csv_buffer)
-    csv_writer.writerow(log_entry)
-
-    s3.put_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY, Body=csv_buffer.getvalue())
-
-    csv_buffer = StringIO()
-    csv_buffer.write(existing_content)
-    csv_writer = csv.writer(csv_buffer)
-    csv_writer.writerow(log_entry)
-
-    s3.put_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY, Body=csv_buffer.getvalue())
-
+    data = {
+        'date': now_local.date().isoformat(),
+        'time': now_local.strftime('%H:%M:%S'),
+        'name': name,
+        'action': action
+    }
+    
+    result = supabase.table('logs').insert(data).execute()
+    
+    if not result.data:
+        raise Exception("Failed to insert log entry")
+    
+    logger.info(f"Logged action: {name} - {action}")
 
 def get_last_update_time():
-    today = datetime.today()
-    LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'
-
-    try:
-        s3response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
-        csv_content = s3response['Body'].read().decode('utf-8')
-        csv_reader = csv.reader(StringIO(csv_content))
-        next(csv_reader)  # Skip header
-
-        last_row = None
-        for row in csv_reader:
-            last_row = row  # Keep track of the last row
-
-        if last_row:
-            time_str = last_row[1]  # Retrieve the formatted time
-            return time_str
-
-    except s3.exceptions.NoSuchKey:
-        return None
-
+    """Get the time of the last action from today."""
+    today = datetime.now(ZoneInfo("Europe/Rome")).date().isoformat()
+    
+    result = supabase.table('logs').select('time').eq('date', today).order('created_at', desc=True).limit(1).execute()
+    
+    if result.data:
+        return result.data[0]['time']
+    return None
 
 def get_current_occupants():
-    today = datetime.today()
-    LOG_FILE_KEY = f'{today.strftime("%Y-%m-%d")}-logs.csv'
+    """Get current occupants based on today's register/unregister actions."""
+    today = datetime.now(ZoneInfo("Europe/Rome")).date().isoformat()
+    
+    # Get all actions from today, ordered by creation time
+    result = supabase.table('logs').select('name, action').eq('date', today).order('created_at').execute()
+    
+    occupants = set()
+    for row in result.data:
+        if row['action'] == 'register':
+            occupants.add(row['name'])
+        elif row['action'] == 'unregister':
+            occupants.discard(row['name'])
+    
+    return occupants
 
-    try:
-        s3response = s3.get_object(Bucket=BUCKET_NAME, Key=LOG_FILE_KEY)
-        csv_content = s3response['Body'].read().decode('utf-8')
-        csv_reader = csv.reader(StringIO(csv_content))
-        next(csv_reader)  # Skip header
-
-        occupants = set()
-        for row in csv_reader:
-            if row[3] == 'register':
-                occupants.add(row[2])
-            elif row[3] == 'unregister':
-                occupants.discard(row[2])
-
-        return occupants
-    except s3.exceptions.NoSuchKey:
-        return set()
-
+def get_occupants_with_history():
+    """Get current occupants considering historical data (not just today)."""
+    # Get all actions, ordered by creation time
+    result = supabase.table('logs').select('name, action').order('created_at').execute()
+    
+    occupants = set()
+    for row in result.data:
+        if row['action'] == 'register':
+            occupants.add(row['name'])
+        elif row['action'] == 'unregister':
+            occupants.discard(row['name'])
+    
+    return occupants
 
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-
 # AWS Lambda handler
 def lambda_handler(event, context):
-    # Log the full event (this includes the request body and other information)
+    # Log the full event
     logger.info(f"Received event: {json.dumps(event)}")
 
     # Log only the request body (if present)
@@ -150,7 +148,6 @@ def lambda_handler(event, context):
 
     # Return awsgi response
     return response(app, event, context)
-
 
 # For local testing
 if __name__ == '__main__':
