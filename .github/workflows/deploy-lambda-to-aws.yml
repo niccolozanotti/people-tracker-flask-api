@@ -3,7 +3,7 @@ name: Deploy Lambda Package
 on:
   push:
     branches:
-      - main  # or the branch you want to deploy from
+      - main
 
 jobs:
   build:
