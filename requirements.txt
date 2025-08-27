@@ -2,3 +2,4 @@ aws-wsgi
 flask
 flask-cors
 supabase
+requests
