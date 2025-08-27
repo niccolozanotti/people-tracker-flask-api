@@ -9,7 +9,7 @@ using the `aws-wsgi` [package](https://pypi.org/project/aws-wsgi/?ref=cloudtechs
 - **Register a Person**: Add a person to the current list of occupants.
 - **Unregister a Person**: Remove a person from the current list of occupants.
 - **Status Check**: Get the current status of the location, including a list of occupants and their count.
-- **Logging**: Actions are logged with timestamps and stored in an S3 bucket.
+- **Logging**: Actions are logged with timestamps and stored in a PostgreSQL table on [supabase](https://supabase.com/)
 
 ## Endpoints
 
@@ -74,12 +74,6 @@ using the `aws-wsgi` [package](https://pypi.org/project/aws-wsgi/?ref=cloudtechs
        "count": number
      }
      ```
-     
-## AWS S3 Logging
-
-- S3 Bucket: The log files are stored in an S3 bucket named ugo-people-tracker.
-- Log Format: Each log entry contains the date, time, name of the person, and the action (register or unregister).
-- File Naming: Logs are saved daily with the filename format YYYY-MM-DD-logs.csv.
 
 ## Deployment
 
@@ -101,20 +95,18 @@ This application is deployed on AWS Lambda using aws-wsgi. Below are the deploym
     - Create an API Gateway to expose the Lambda function as an HTTP API. 
     - Configure CORS settings if needed. 
 
-    
 ## Local Development
 
-For local testing and development, you can run the Flask application using the built-in server:
+For local testing and development, create a virtual environment - say at `.venv` - activate it
+and run
+```sh
+(.venv) pip install -r requirements.txt
+```
+Then you can run the Flask application using the built-in server:
 ```shell
-python lambda_function.py
+(.venv) python app.py
 ```
 The application will be accessible at `http://127.0.0.1:5000/`.
-
-## Notes
-
-- Ensure your Lambda function has the necessary permissions to read and write to the specified S3 bucket.
-
-[//]: # (# TODO add inline policy example for reading/writing/listing to the bucket)
 
 ## License
 
