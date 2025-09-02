@@ -1,7 +1,6 @@
 import os
 import json
 import logging
-import requests
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -15,11 +14,11 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # Initialize supabase client
-db_url: str = os.environ.get("SUPABASE_URL")
-db_key: str = os.environ.get("SUPABASE_KEY")
+url: str = os.environ.get("SUPABASE_URL")
+key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(
-    db_url,
-    db_key,
+    url,
+    key,
     options=ClientOptions(
         postgrest_client_timeout=10,
         storage_client_timeout=10,
@@ -27,68 +26,13 @@ supabase: Client = create_client(
     )
 )
 
-# WhatsApp API configuration
-whapi_token: str = os.environ.get("WHAPI_TOKEN")
-whapi_chat_id: str = os.environ.get("WHAPI_CHAT_ID")
-whapi_url = "https://gate.whapi.cloud/messages/text"
-
-def send_whatsapp_notification(status: str):
-    """Send WhatsApp notification about room status change."""
-    if not whapi_token or not whapi_chat_id:
-        logger.warning("WhatsApp API credentials not configured")
-        return
-    if status == "closed":
-        status_it = "chiusa"
-    else:
-        status_it = "aperta"
-    message = f"""
-    `Automation`: L'aula è ora *{status_it}*.
-
-    https://ugoforlimpopoli.it/opening-status
-    """
-    
-    payload = {
-        "typing_time": 2,
-        "to": whapi_chat_id,
-        "body": message
-    }
-    
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "authorization": f"Bearer {whapi_token}"
-    }
-    
-    try:
-        response = requests.post(whapi_url, json=payload, headers=headers, timeout=10)
-        if response.status_code == 200:
-            logger.info(f"WhatsApp notification sent: {message}")
-        else:
-            logger.error(f"Failed to send WhatsApp notification: {response.status_code} - {response.text}")
-    except Exception as e:
-        logger.error(f"Error sending WhatsApp notification: {str(e)}")
-
-def get_room_status():
-    """Get current room status (open/closed)."""
-    occupants = get_current_occupants()
-    return "open" if occupants else "closed"
-
 @app.route('/people/register', methods=['POST'])
 def register():
     data = request.json
     name = data.get('name')
     if name:
         try:
-            # Get status before action
-            previous_status = get_room_status()
-            
             log_action(name, 'register')
-            
-            # Get status after action and check if changed
-            current_status = get_room_status()
-            if previous_status != current_status:
-                send_whatsapp_notification(current_status)
-            
             return json.dumps({"status": "registered"}), 200, {'Content-Type': 'application/json'}
         except Exception as e:
             logger.error(f"Error registering {name}: {str(e)}")
@@ -102,16 +46,7 @@ def unregister():
     name = data.get('name')
     if name:
         try:
-            # Get status before action
-            previous_status = get_room_status()
-            
             log_action(name, 'unregister')
-            
-            # Get status after action and check if changed
-            current_status = get_room_status()
-            if previous_status != current_status:
-                send_whatsapp_notification(current_status)
-            
             return json.dumps({"status": "unregistered"}), 200, {'Content-Type': 'application/json'}
         except Exception as e:
             logger.error(f"Error unregistering {name}: {str(e)}")
