@@ -125,14 +125,21 @@ logger.setLevel(logging.INFO)
 
 # AWS Lambda handler
 def lambda_handler(event, context):
-    # Log the full event
     logger.info(f"Received event: {json.dumps(event)}")
 
-    # Log only the request body (if present)
-    if 'body' in event:
-        logger.info(f"Request body: {event['body']}")
+    # Convert HTTP API v2.0 to v1.0 format for awsgi
+    if 'requestContext' in event and 'http' in event['requestContext']:
+        v1_event = {
+            'httpMethod': event['requestContext']['http']['method'],
+            'path': event['requestContext']['http']['path'],
+            'pathParameters': event.get('pathParameters'),
+            'queryStringParameters': event.get('queryStringParameters'),
+            'headers': event.get('headers', {}),
+            'body': event.get('body'),
+            'isBase64Encoded': event.get('isBase64Encoded', False)
+        }
+        return response(app, v1_event, context)
 
-    # Return awsgi response
     return response(app, event, context)
 
 # For local testing
